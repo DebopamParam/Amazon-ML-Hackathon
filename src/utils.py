@@ -1,5 +1,5 @@
 import re
-import constants
+from src import constants
 import os
 import requests
 import pandas as pd
@@ -16,9 +16,10 @@ from PIL import Image, ImageOps
 from io import BytesIO
 import cv2
 
+
 class ImageConverter:
-    def __init__(self, csv_path, image_folder, image_size=(500, 500)):
-        self.csv_path = csv_path
+    def __init__(self, csv_obj, image_folder, image_size=(200, 200)):
+        self.csv_obj = csv_obj
         self.image_folder = image_folder
         self.image_size = image_size
 
@@ -45,17 +46,16 @@ class ImageConverter:
         grayscale_image.thumbnail(self.image_size, resample=Image.LANCZOS)
 
         # Add padding to match the target size
-        padded_image = ImageOps.pad(grayscale_image, self.image_size, color='black')
+        padded_image = ImageOps.pad(grayscale_image, self.image_size, color="black")
 
         return padded_image
 
     def process_images_from_csv(self):
-        """Processes all images from the CSV."""
-        df = pd.read_csv(self.csv_path)
-        df = df.head(200)
+        """Processes all images from the CSV object."""
+        df = self.csv_obj
 
         for index, row in df.iterrows():
-            image_url = row['image_link']
+            image_url = row["image_link"]
             img = self.download_image(image_url)
 
             if img:
@@ -66,7 +66,9 @@ class ImageConverter:
                 open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
 
                 # Save the preprocessed image
-                image_path = os.path.join(self.image_folder, f'processed_image_{index}.jpg')
+                image_path = os.path.join(
+                    self.image_folder, f"processed_image_{index}.jpg"
+                )
                 cv2.imwrite(image_path, open_cv_image)
                 print(f"Saved processed image to {image_path}")
 
@@ -74,34 +76,39 @@ class ImageConverter:
 def common_mistake(unit):
     if unit in constants.allowed_units:
         return unit
-    if unit.replace('ter', 'tre') in constants.allowed_units:
-        return unit.replace('ter', 'tre')
-    if unit.replace('feet', 'foot') in constants.allowed_units:
-        return unit.replace('feet', 'foot')
+    if unit.replace("ter", "tre") in constants.allowed_units:
+        return unit.replace("ter", "tre")
+    if unit.replace("feet", "foot") in constants.allowed_units:
+        return unit.replace("feet", "foot")
     return unit
 
+
 def parse_string(s):
-    s_stripped = "" if s==None or str(s)=='nan' else s.strip()
+    s_stripped = "" if s == None or str(s) == "nan" else s.strip()
     if s_stripped == "":
         return None, None
-    pattern = re.compile(r'^-?\d+(\.\d+)?\s+[a-zA-Z\s]+$')
+    pattern = re.compile(r"^-?\d+(\.\d+)?\s+[a-zA-Z\s]+$")
     if not pattern.match(s_stripped):
         raise ValueError("Invalid format in {}".format(s))
     parts = s_stripped.split(maxsplit=1)
     number = float(parts[0])
     unit = common_mistake(parts[1])
     if unit not in constants.allowed_units:
-        raise ValueError("Invalid unit [{}] found in {}. Allowed units: {}".format(
-            unit, s, constants.allowed_units))
+        raise ValueError(
+            "Invalid unit [{}] found in {}. Allowed units: {}".format(
+                unit, s, constants.allowed_units
+            )
+        )
     return number, unit
 
 
 def create_placeholder_image(image_save_path):
     try:
-        placeholder_image = Image.new('RGB', (100, 100), color='black')
+        placeholder_image = Image.new("RGB", (100, 100), color="black")
         placeholder_image.save(image_save_path)
     except Exception as e:
         return
+
 
 def download_image(image_link, save_folder, retries=3, delay=3):
     if not isinstance(image_link, str):
@@ -119,8 +126,11 @@ def download_image(image_link, save_folder, retries=3, delay=3):
             return
         except:
             time.sleep(delay)
-    
-    create_placeholder_image(image_save_path) #Create a black placeholder image for invalid links/images
+
+    create_placeholder_image(
+        image_save_path
+    )  # Create a black placeholder image for invalid links/images
+
 
 def download_images(image_links, download_folder, allow_multiprocessing=True):
     if not os.path.exists(download_folder):
@@ -128,13 +138,18 @@ def download_images(image_links, download_folder, allow_multiprocessing=True):
 
     if allow_multiprocessing:
         download_image_partial = partial(
-            download_image, save_folder=download_folder, retries=3, delay=3)
+            download_image, save_folder=download_folder, retries=3, delay=3
+        )
 
         with multiprocessing.Pool(64) as pool:
-            list(tqdm(pool.imap(download_image_partial, image_links), total=len(image_links)))
+            list(
+                tqdm(
+                    pool.imap(download_image_partial, image_links),
+                    total=len(image_links),
+                )
+            )
             pool.close()
             pool.join()
     else:
         for image_link in tqdm(image_links, total=len(image_links)):
             download_image(image_link, save_folder=download_folder, retries=3, delay=3)
-        
